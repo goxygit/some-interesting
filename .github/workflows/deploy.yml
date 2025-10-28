@@ -32,4 +32,4 @@ jobs:
 
       # 5. Check rollout status
       - name: Rollout status
-        run: kubectl rollout status deployment/myapp -n default
+        run: kubectl rollout status k8s/daemonset.yaml -n default

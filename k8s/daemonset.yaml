@@ -35,14 +35,3 @@ spec:
   type: LoadBalancer
 
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: aws-auth
-  namespace: kube-system
-data:
-  mapUsers: |
-    - userarn: arn:aws:iam::590183728861:user/github-actions
-      username: github-actions
-      groups:
-        - system:masters
