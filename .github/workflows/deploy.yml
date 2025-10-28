@@ -45,11 +45,11 @@ jobs:
 
       - name: Deploy DaemonSet
         run: |
-          # Создаём DaemonSet (если ещё нет)
-          kubectl apply -f k8s/daemonset.yaml || true
+          # Заменяем плейсхолдер <ECR_REGISTRY> на реальный URI
+          sed -i "s|<ECR_REGISTRY>|${{ steps.login-ecr.outputs.registry }}|g" k8s/daemonset.yaml
 
-          # Обновляем контейнер на правильный ECR image
-          kubectl set image daemonset/site-app site-app=${{ steps.login-ecr.outputs.registry }}/site-app:latest
+          # Применяем манифест
+          kubectl apply -f k8s/daemonset.yaml
 
-          # Ждём, пока все поды обновятся
+          # Ждём, пока DaemonSet поднимется на всех нодах
           kubectl rollout status daemonset/site-app
