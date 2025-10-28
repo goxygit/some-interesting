@@ -67,6 +67,55 @@ addons = {
     Terraform   = "true"
   }
 }
+data "aws_route53_zone" "site" {
+  name         = "okalashnyk.com"   # твой домен
+  private_zone = false
+}
+data "kubernetes_service" "site_service" {
+  provider = kubernetes.eks
+  metadata {
+    name      = "site-service"
+    namespace = "default"
+  }
+}
+
+# 3️⃣ Получаем Route53-зону (замени на свой домен)
+
+resource "aws_route53_record" "site" {
+  zone_id = data.aws_route53_zone.site.zone_id
+  name    = "" 
+  type    = "A"
+  alias {
+    name                   = data.kubernetes_service.site_service.status[0].load_balancer[0].ingress[0].hostname
+    zone_id                = "Z215JYRZR1TBD5" # зона ALB в eu-central-1
+    evaluate_target_health = true
+  }
+}
+
+
+# DNS валидация через Route 53
+# resource "aws_route53_record" "cert_validation" {
+#   for_each = {
+#     for dvo in aws_acm_certificate.site_cert.domain_validation_options : dvo.domain_name => {
+#       name   = dvo.resource_record_name
+#       type   = dvo.resource_record_type
+#       record = dvo.resource_record_value
+#     }
+#   }
+
+#   zone_id = "Z123456789EXAMPLE"   # ID зоны Route 53 для домена
+#   name    = each.value.name
+#   type    = each.value.type
+#   ttl     = 60
+#   records = [each.value.record]
+# }
+
+# # Завершаем проверку сертификата
+# resource "aws_acm_certificate_validation" "site_cert_validation" {
+#   certificate_arn         = aws_acm_certificate.site_cert.arn
+#   validation_record_fqdns = [for r in aws_route53_record.cert_validation : r.fqdn]
+# }
+
 module "karpenter" {
   source = "terraform-aws-modules/eks/aws//modules/karpenter"
 
@@ -186,12 +235,7 @@ module "argocd_secret" {
 #     module.argocd_secret
 #   ]
 # }
-resource "kubernetes_namespace" "web" {
-  provider = kubernetes.eks
-  metadata {
-    name = "web"
-  }
-}
+
 
 resource "aws_ecr_repository" "my_site" {
   name                 = "site-app"
@@ -200,33 +244,6 @@ resource "aws_ecr_repository" "my_site" {
     scan_on_push = true
   }
 
-}
-data "aws_ecr_authorization_token" "token" {}
-locals {
-  ecr_auth      = base64decode(data.aws_ecr_authorization_token.token.authorization_token)
-  ecr_password  = split(":", local.ecr_auth)[1]
-}
-
-resource "kubernetes_secret" "ecr" {
-  provider = kubernetes.eks
-  metadata {
-    name      = "ecr-registry"
-    namespace = kubernetes_namespace.web.metadata[0].name
-  }
-
-  type = "kubernetes.io/dockerconfigjson"
-
-  data = {
-    ".dockerconfigjson" = base64encode(jsonencode({
-      auths = {
-        "${aws_ecr_repository.my_site.repository_url}" = {
-          username = "AWS"
-          password = local.ecr_password
-          email    = "none"
-        }
-      }
-    }))
-  }
 }
 
 

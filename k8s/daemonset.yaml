@@ -24,14 +24,15 @@ apiVersion: v1
 kind: Service
 metadata:
   name: site-service
-  namespace: default
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"  # ALB
+    service.beta.kubernetes.io/aws-load-balancer-scheme: internet-facing
 spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 80
   selector:
     app: site-app
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 80
-  type: LoadBalancer
 
 ---
