@@ -194,8 +194,12 @@ resource "kubernetes_namespace" "web" {
 }
 
 resource "aws_ecr_repository" "my_site" {
-  name                 = "my-site"
+  name                 = "site-app"
   image_tag_mutability = "MUTABLE"
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
 }
 
 data "aws_iam_policy_document" "jenkins_assume" {
