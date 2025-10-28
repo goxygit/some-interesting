@@ -28,7 +28,7 @@ jobs:
       - name: Update Kubernetes Deployment
         run: |
           IMAGE_TAG=${{ github.event.client_payload.image_tag }}
-          kubectl set image deployment/myapp myapp=${{ secrets.DOCKER_REGISTRY }}:$IMAGE_TAG -n default
+          kubectl set image k8s/daemonset.yaml myapp=${{ secrets.DOCKER_REGISTRY }}:$IMAGE_TAG -n default
 
       # 5. Check rollout status
       - name: Rollout status
