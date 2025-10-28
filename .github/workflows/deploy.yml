@@ -43,7 +43,13 @@ jobs:
         run: |
           aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
 
-      - name: Deploy as DaemonSet
+      - name: Deploy DaemonSet
         run: |
-          kubectl apply -f k8s/daemonset.yaml
+          # Создаём DaemonSet (если ещё нет)
+          kubectl apply -f k8s/daemonset.yaml || true
+
+          # Обновляем контейнер на правильный ECR image
+          kubectl set image daemonset/site-app site-app=${{ steps.login-ecr.outputs.registry }}/site-app:latest
+
+          # Ждём, пока все поды обновятся
           kubectl rollout status daemonset/site-app
