@@ -8,11 +8,9 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # 1. Checkout repo B
       - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 2. Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -20,16 +18,19 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      # 3. Update kubeconfig for cluster dev
       - name: Update kubeconfig
         run: aws eks update-kubeconfig --name dev --region ${{ secrets.AWS_REGION }}
 
-      # 4. Update Kubernetes Deployment with new Docker image
-      - name: Update Kubernetes Deployment
+      # Сначала применяем манифест, чтобы ресурс точно был в кластере
+      - name: Apply Kubernetes manifests
+        run: kubectl apply -f k8s/daemonset.yaml -n default
+
+      # Обновляем образ контейнера
+      - name: Update Docker image
         run: |
           IMAGE_TAG=${{ github.event.client_payload.image_tag }}
-          kubectl set image k8s/daemonset.yaml myapp=${{ secrets.DOCKER_REGISTRY }}:$IMAGE_TAG -n default
+          kubectl set image daemonset/site-app site-app=${{ secrets.DOCKER_REGISTRY }}:$IMAGE_TAG -n default
 
-      # 5. Check rollout status
+      # Проверяем rollout
       - name: Rollout status
-        run: kubectl rollout status k8s/daemonset.yaml -n default
+        run: kubectl rollout status daemonset/site-app -n default
