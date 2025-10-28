@@ -1,55 +1,35 @@
-name: Build & Deploy Site to EKS (DaemonSet)
+name: Deploy to EKS
 
 on:
   repository_dispatch:
-    types: [deploy-site]
+    types: [new-image]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout DevOps repo
-        uses: actions/checkout@v4
+      # 1. Checkout repo B
+      - name: Checkout repo
+        uses: actions/checkout@v3
 
-      - name: Checkout Site repo
-        uses: actions/checkout@v4
-        with:
-          repository: goxygit/site-repo
-          token: ${{ secrets.GH_PAT }}
-          path: site
-
+      # 2. Configure AWS credentials
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Build & Push Docker image
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: site-app
-          IMAGE_TAG: latest
-        run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./site
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
-
+      # 3. Update kubeconfig for cluster dev
       - name: Update kubeconfig
+        run: aws eks update-kubeconfig --name dev --region ${{ secrets.AWS_REGION }}
+
+      # 4. Update Kubernetes Deployment with new Docker image
+      - name: Update Kubernetes Deployment
         run: |
-          aws eks update-kubeconfig --region ${{ secrets.AWS_REGION }} --name ${{ secrets.EKS_CLUSTER_NAME }}
+          IMAGE_TAG=${{ github.event.client_payload.image_tag }}
+          kubectl set image deployment/myapp myapp=${{ secrets.DOCKER_REGISTRY }}:$IMAGE_TAG -n default
 
-      - name: Deploy DaemonSet
-        run: |
-          # Заменяем плейсхолдер <ECR_REGISTRY> на реальный URI
-          sed -i "s|<ECR_REGISTRY>|${{ steps.login-ecr.outputs.registry }}|g" k8s/daemonset.yaml
-
-          # Применяем манифест
-          kubectl apply -f k8s/daemonset.yaml
-
-          # Ждём, пока DaemonSet поднимется на всех нодах
-          kubectl rollout status daemonset/site-app
+      # 5. Check rollout status
+      - name: Rollout status
+        run: kubectl rollout status deployment/myapp -n default

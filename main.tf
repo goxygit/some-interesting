@@ -201,63 +201,35 @@ resource "aws_ecr_repository" "my_site" {
   }
 
 }
+data "aws_ecr_authorization_token" "token" {}
+locals {
+  ecr_auth      = base64decode(data.aws_ecr_authorization_token.token.authorization_token)
+  ecr_password  = split(":", local.ecr_auth)[1]
+}
 
-data "aws_iam_policy_document" "jenkins_assume" {
-  statement {
-    effect = "Allow"
-    principals {
-      type        = "Federated"
-      identifiers = [module.eks.oidc_provider_arn]
-    }
-    actions = ["sts:AssumeRoleWithWebIdentity"]
-    condition {
-      test     = "StringEquals"
-      variable = "${replace(module.eks.oidc_provider, "https://", "")}:sub"
-      values   = ["system:serviceaccount:jenkins:jenkins"]
-    }
+resource "kubernetes_secret" "ecr" {
+  provider = kubernetes.eks
+  metadata {
+    name      = "ecr-registry"
+    namespace = kubernetes_namespace.web.metadata[0].name
+  }
+
+  type = "kubernetes.io/dockerconfigjson"
+
+  data = {
+    ".dockerconfigjson" = base64encode(jsonencode({
+      auths = {
+        "${aws_ecr_repository.my_site.repository_url}" = {
+          username = "AWS"
+          password = local.ecr_password
+          email    = "none"
+        }
+      }
+    }))
   }
 }
 
-resource "aws_iam_role" "jenkins" {
-  name = "jenkins-irsa-${module.eks.cluster_name}"
-  assume_role_policy = data.aws_iam_policy_document.jenkins_assume.json
-}
 
-resource "aws_iam_role_policy_attachment" "jenkins_ecr" {
-  role       = aws_iam_role.jenkins.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPowerUser"
-}
-resource "kubernetes_namespace" "jenkins" {
-    provider = kubernetes.eks
-  metadata { name = "jenkins" }
-}
-resource "random_password" "jenkins" {
-  length           = 16
-  special          = true
-  override_special = "!@#%&*()-_+="
-}
-
-resource "helm_release" "jenkins" {
-  provider = helm.eks
-  name       = "jenkins"
-  namespace  = kubernetes_namespace.jenkins.metadata[0].name
-  repository = "https://charts.jenkins.io"
-  chart      = "jenkins"
-  version    = "5.8.104"
-
-  values = [
-  <<EOF
-controller:
-  admin:
-    username: admin
-    password: ${random_password.jenkins.result}
-  serviceType: LoadBalancer
-persistence:
-  enabled: false
-EOF
-]
-
-}
 
 # istio, jenkins 
 
